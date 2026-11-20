@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>经营指标情景推演工具</title>
+  <link rel="stylesheet" href="./src/ui/styles.css" />
+</head>
+<body data-theme="light">
+  <header class="app-header">
+    <div>
+      <h1>经营指标情景推演</h1>
+      <p class="subtitle">调整价格、转化率、成本与供给约束，查看指标联动与 P5–P95 不确定区间。推演数据与正式数据隔离，确认后才生成可引用版本。</p>
+    </div>
+    <div class="header-actions">
+      <label class="seed-control">随机种子
+        <input type="number" id="seed-input" value="42" min="0" max="4294967295" />
+      </label>
+      <button class="btn btn-ghost" id="theme-toggle" type="button">切换暗色</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左列：参数 + 依赖 -->
+    <section class="col col-left">
+      <div class="card">
+        <div class="card-head">
+          <h2>① 推演参数（沙箱草稿）</h2>
+          <span class="tag tag-orange">隔离区 · 可反复修改</span>
+        </div>
+        <form id="param-form" onsubmit="return false"></form>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="btn-run" type="button">运行推演 <kbd>Ctrl+Enter</kbd></button>
+          <button class="btn btn-ghost" id="btn-reset" type="button">恢复示例参数</button>
+        </div>
+        <div class="banner banner-critical" id="validation-banner" hidden></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>② 指标依赖链</h2></div>
+        <div class="dependency-flow" id="dependency-flow"></div>
+        <p class="card-hint">高亮节点为当前推演的关键路径；橙色节点表示供给约束正在截断销量。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>数据隔离状态</h2></div>
+        <ul class="isolation-report" id="isolation-report"></ul>
+      </div>
+    </section>
+
+    <!-- 右列：结果 + 确认 + 版本 -->
+    <section class="col col-right">
+      <div class="card" id="results-panel" hidden>
+        <div class="card-head">
+          <h2>③ 联动结果与不确定区间</h2>
+          <span class="meta" id="result-meta"></span>
+        </div>
+        <div class="kpi-row" id="kpi-row"></div>
+        <div class="chart-card" id="range-chart"></div>
+        <details class="table-details" open>
+          <summary>精确数值表（点估计 / P5 / P50 / P95 / 基线区间）</summary>
+          <table class="data-table" id="interval-table">
+            <thead>
+              <tr><th>指标</th><th>点估计</th><th>P5</th><th>P50</th><th>P95</th><th>基线 P5–P95</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </details>
+        <ul class="derived-notes" id="derived-notes"></ul>
+      </div>
+
+      <div class="card card-confirm">
+        <div class="card-head">
+          <h2>④ 确认生成可引用版本</h2>
+          <span class="tag tag-blue">写入正式账本 · 仅追加</span>
+        </div>
+        <p class="card-hint">确认后结果被冻结为不可变版本，带内容指纹与记录指纹；相同参数重复确认自动幂等，不产生重复版本。</p>
+        <div class="confirm-row">
+          <input type="text" id="confirm-note" maxlength="500" placeholder="版本备注（可选，如：双十一大促涨价方案）" />
+          <button class="btn btn-primary" id="btn-confirm" type="button">确认当前推演</button>
+        </div>
+        <div class="feedback" id="confirm-feedback" hidden></div>
+        <div class="verify-row">
+          <button class="btn btn-ghost" id="btn-verify" type="button">校验账本完整性</button>
+          <span class="feedback" id="verify-feedback" hidden></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>⑤ 确认记录与版本回滚 <span class="meta">（共 <span id="ledger-count">0</span> 个正式版本）</span></h2>
+        </div>
+        <table class="data-table ledger-table" id="ledger-table">
+          <thead>
+            <tr><th>版本</th><th>确认时间</th><th>内容指纹</th><th>备注</th><th>利润 / 销量</th><th>操作</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>⑥ 操作审计</h2></div>
+        <ul class="audit-list" id="audit-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    零依赖原生实现 · 蒙特卡洛 2000 次抽样 · 同参数同种子结果逐位可复现 · 数据仅存于浏览器 localStorage
+  </footer>
+
+  <script type="module" src="./src/ui/app.mjs"></script>
+  <script>
+    // 主题切换（在模块脚本之外保持极简，避免闪烁）
+    const toggle = document.getElementById('theme-toggle');
+    const saved = localStorage.getItem('scenario-sim:theme') || 'light';
+    document.body.dataset.theme = saved;
+    toggle.textContent = saved === 'light' ? '切换暗色' : '切换亮色';
+    toggle.addEventListener('click', () => {
+      const next = document.body.dataset.theme === 'light' ? 'dark' : 'light';
+      document.body.dataset.theme = next;
+      localStorage.setItem('scenario-sim:theme', next);
+      toggle.textContent = next === 'light' ? '切换暗色' : '切换亮色';
+    });
+  </script>
+</body>
+</html>
